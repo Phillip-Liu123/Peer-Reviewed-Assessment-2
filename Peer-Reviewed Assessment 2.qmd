@@ -2,10 +2,223 @@
 title: "Peer-Reviewed Assessment 2"
 ---
 
-## Quarto
+---
+title: "Parallel Computing Practical"
+---
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+### Question 1
 
 ```{r}
-1 + 1
+library(foreach)
+
+num_reps <- 100
+
+results <- foreach(i = 1:num_reps, .combine = rbind) %do% {
+  # Generate 100 random samples from Exp(1)
+  sample_data <- rexp(100, rate = 1)
+  # Calculate mean
+  sample_mean <- mean(sample_data) 
+  # Calculate variance
+  sample_variance <- var(sample_data) 
+  
+  c(sample_mean, sample_variance)
+}
+
+mat <- cbind(rep("Observation", 100), 1:100)
+
+name_vector <- apply(mat, 1, function(row_names) paste(row_names[1], row_names[2]))
+
+# convert results into a data frame
+results_df <- as.data.frame(results)
+colnames(results_df) <- c("Mean", "Variance")
+rownames(results_df) <- (name_vector)
+
+# Display the first few rows
+head(results_df)
+
 ```
+
+### Question 2
+
+```{r}
+#| message: false
+library(MASS)
+library(doParallel)
+library(foreach)
+
+# Number of bootstrap samples
+B <- 10000
+data <- galaxies
+
+# Step 1: Serial Bootstrapping
+serial_start <- Sys.time()
+  
+serial_bootstrap <- foreach(i = 1:B,.combine = 'c') %do% {
+  median(sample(data, replace = TRUE))
+}
+
+serial_end <- Sys.time()
+serial_time <- serial_end - serial_start
+
+# Step 2: Parallel Bootstrapping (Single Samples per Iteration)
+# Set up parallel backend
+num_cores <- detectCores() - 1 
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+parallel_start <- Sys.time()
+
+parallel_bootstrap <- foreach(i = 1:B, .combine = c) %dopar% {
+  median(sample(data, replace = TRUE))
+}
+
+parallel_end <- Sys.time()
+parallel_time <- parallel_end - parallel_start
+
+stopCluster(cl)
+
+# Step 3: Parallel Bootstrapping (Larger Chunks of 1000 Samples per Iteration)
+
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+chunk_size <- 1000
+num_chunks <- B / chunk_size # Number of iterations with chunking
+
+chunked_parallel_start <- Sys.time()
+
+chunked_parallel_bootstrap <- foreach(i = 1:num_chunks, .combine = c) %dopar% {
+  replicate(chunk_size, median(sample(data, replace = TRUE)))
+}
+
+chunked_parallel_end <- Sys.time()
+chunked_parallel_time <- chunked_parallel_end - chunked_parallel_start
+
+stopCluster(cl)
+
+cat("\nPerformance Comparison:\n")
+cat("Serial Processing Time:", serial_time, "\n")
+cat("Parallel Processing Time (Single Samples per Iteration):", parallel_time, "\n")
+cat("Parallel Processing Time (Chunks of 1000):", chunked_parallel_time, "\n")
+```
+
+### Question 3
+
+```{r}
+library(foreach)
+library(doParallel)
+
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+B <- 1000
+O <- 1000  # Number of original samples
+true_mean <- 1
+
+os_samp <- rexp(50, rate = 1)
+
+coverage <- foreach(i = 1:O, .combine = c, .packages = "foreach") %dopar% {
+  
+  os_samp <- rexp(50,rate = 1)
+  
+  boot_means <- foreach(i = 1:B, .combine = c) %do% {
+    boot_sample <- sample(os_samp, 50, replace = TRUE)
+    mean(boot_sample)
+  }
+  
+  ci <- quantile(boot_means, c(0.025,0.975))
+  
+  (ci[1] < true_mean) & (ci[2] > true_mean)
+}
+
+mean(coverage)
+
+stopCluster(cl)
+
+```
+
+### Question 4
+
+```{r}
+# Load required libraries
+library(iterators)
+
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Set the seed for reproducibility
+set.seed(1234)
+
+# Use foreach to iterate over each vector, compute the maximum, and print the results
+max_values <- foreach(i = 1:3, .combine = c, .packages = "iterators") %dopar% {
+  it <- irnorm(1, n = 5)
+  max(nextElem(it))
+}
+
+# Print the maximum values
+print(max_values)
+stopCluster(cl)
+
+```
+
+### Question 5
+```{r}
+#| warning: false
+
+# Load necessary libraries
+library(parallel)
+library(foreach)
+library(doParallel)
+
+# Set seed for reproducibility
+set.seed(1234)
+
+# Method 1: replicate (serial)
+time_replicate <- system.time({
+  result_replicate <- replicate(3, {
+    vec <- irnorm(5)
+    max(nextElem(vec))
+  })
+})
+
+# Method 2: parLapply (parallel)
+time_parLapply <- system.time({
+  cl <- makeCluster(detectCores()) # Create cluster
+  clusterSetRNGStream(cl, 1234) # Set seed for reproducibility
+  result_parLapply <- parLapply(cl, 1:3, function(x) {
+    library(foreach)
+    library(iterators)
+    vec <- irnorm(5) # Generate 5 random numbers
+    max(nextElem(vec)) # Compute maximum
+  })                                
+  stopCluster(cl)                   
+})
+
+# Method 3: foreach (parallel)
+time_foreach <- system.time({
+  cl <- makeCluster(detectCores())
+  registerDoParallel(cl)
+  clusterSetRNGStream(cl, 1234)
+  result_foreach <- foreach(i = 1:3, .combine = c) %dopar% {
+    library(foreach)
+    library(iterators)
+    vec <- irnorm(5)
+    max(nextElem(vec))
+  }
+  stopCluster(cl)
+})
+
+# Print results
+cat("replicate time:\n")
+print(time_replicate)
+cat("\nparLapply time:\n")
+print(time_parLapply)
+cat("\nforeach time:\n")
+print(time_foreach)
+```
+The observed results, where the replicate function outperformed both parLapply and foreach in terms of speed, align perfectly with theoretical expectations for small-scale tasks like the one tested. This behavior occurs because parallel processing inherently introduces overhead from cluster initialisation, task distribution, and result aggregation. For trivial computations—such as generating three vectors of five random numbers each and finding their maxima—the time spent managing parallel workers (starting processes, transferring data, synchronising results) far exceeds the time required to perform the actual calculations. Serial methods like replicate avoid this overhead entirely, executing tasks sequentially without the logistical costs of parallelisation. This explains why replicate completed the task in a fraction of the time (ie: ~0.001 seconds) compared to the parallel methods (~1.5 seconds), which spent most of their runtime on setup rather than computation.
+
+The results also highlight a critical principle of parallel computing: the benefits of parallelisation depend heavily on the relationship between task size and overhead. Parallel frameworks like parLapply and foreach excel in large-scale scenarios—such as bootstrapping thousands of samples or running complex simulations—where the computational workload per iteration is substantial enough to justify the overhead. Conversely, for tiny tasks like this example, the overhead dominates, making serial methods more efficient. The minor timing differences between parLapply and foreach reflect implementation nuances but do not alter the overarching conclusion.
+
+These findings underscore the importance of evaluating problem size before choosing a parallel approach. While parallel processing is powerful for scaling up intensive workloads, it becomes counterproductive for small, quick tasks. To see its advantages in action, one could rerun the experiment with larger parameters (ie: 10,000 iterations or longer vectors), where parallel methods would likely overtake replicate in efficiency. Ultimately, the results reinforce the rule that parallelisation should be reserved for problems where the computational effort per iteration outweighs the inherent costs of parallel management.
