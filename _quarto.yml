@@ -15,5 +15,6 @@ book:
     background: light
   chapters:
   - index.qmd
+  - Peer-Reviewed Assessment.qmd
 
 
