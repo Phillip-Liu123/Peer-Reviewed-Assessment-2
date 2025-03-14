@@ -1,5 +1,19 @@
 project:
   title: "Peer-Reviewed Assessment 2"
-
+  type: book
+  render:
+  - index.qmd
+  output-dir: docs
+book:
+  title: "Practical Submissions 2"
+  sidebar:
+    border: true
+    background: light
+    position: right
+  navbar:
+    search: true
+    background: light
+  chapters:
+  - Peer-Reviewed Assessment 2.qmd
 
 
